@@ -90,7 +90,7 @@ func Connect(cfg *config.Config) (*gorm.DB, error) {
 	if strings.EqualFold(cfg.DBConnection, "sqlite") {
 		return gorm.Open(sqlite.Open(sqliteDSN(cfg.DBDatabase)), gormConfig())
 	}
-	return gorm.Open(postgres.Open(cfg.DSN()), gormConfig())
+	return gorm.Open(postgres.New(postgres.Config{DSN: cfg.DSN(), PreferSimpleProtocol: true}), gormConfig())
 }
 
 // ConnectTest membuka basis data SQLite in-memory yang terisolasi (untuk pengujian) dan memigrasikannya.
