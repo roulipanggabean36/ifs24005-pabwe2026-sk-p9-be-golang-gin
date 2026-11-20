@@ -1,0 +1,52 @@
+# Environment & Secrets (Keep .env.example)
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Go Binaries & Compilations (diawali slash agar folder internal/server/ TIDAK ikut terabaikan)
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/server
+/main
+/app
+/server.exe
+bin/
+dist/
+
+# Test & Code Coverage Artifacts
+cov
+cov.*
+coverage
+coverage.*
+*.out
+*.test
+*.prof
+
+# Dependencies
+vendor/
+
+# SonarQube & CI caches
+.scannerwork/
+
+# IDE, Editors & OS Files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Basis data SQLite sementara
+*.db
+*.sqlite
+*.sqlite3
+
+# Artefak CI
+.trivy-cache/
+trivy-results.sarif
+latest-app.zip

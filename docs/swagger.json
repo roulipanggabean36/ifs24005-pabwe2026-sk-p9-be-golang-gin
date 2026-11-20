@@ -1,0 +1,1629 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "Delcom Blog REST API",
+    "description": "Dokumentasi RESTful API Delcom Blog (Golang Gin, Clean Architecture & Feature-First) dengan AI Blog Generator terintegrasi Search Engine. Seluruh respons berformat {status, message, data?}.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "Delcom - Labs"
+    }
+  },
+  "host": "localhost:8081",
+  "basePath": "/",
+  "schemes": [
+    "http"
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "tags": [
+    {
+      "name": "Dokumentasi"
+    },
+    {
+      "name": "Publik"
+    },
+    {
+      "name": "Autentikasi"
+    },
+    {
+      "name": "Penulis"
+    },
+    {
+      "name": "Admin"
+    }
+  ],
+  "securityDefinitions": {
+    "BearerAuth": {
+      "type": "apiKey",
+      "name": "Authorization",
+      "in": "header",
+      "description": "Masukkan: Bearer <token JWT>"
+    }
+  },
+  "paths": {
+    "/swagger/{any}": {
+      "get": {
+        "tags": [
+          "Dokumentasi"
+        ],
+        "summary": "Swagger UI",
+        "description": "Dokumentasi interaktif Swagger UI (http://localhost:8081/swagger/index.html). `/swagger` dialihkan ke `/swagger/index.html`.",
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Halaman Swagger UI"
+          }
+        },
+        "parameters": [
+          {
+            "name": "any",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "description": "Berkas Swagger UI, mis. index.html"
+          }
+        ]
+      }
+    },
+    "/api.json": {
+      "get": {
+        "tags": [
+          "Dokumentasi"
+        ],
+        "summary": "Spesifikasi OpenAPI dinamis",
+        "description": "Spesifikasi OpenAPI/Swagger JSON; host dan scheme menyesuaikan request (menghormati X-Forwarded-Host dan X-Forwarded-Proto).",
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Dokumen OpenAPI 2.0"
+          }
+        }
+      }
+    },
+    "/api/public/categories": {
+      "get": {
+        "tags": [
+          "Publik"
+        ],
+        "summary": "Daftar kategori",
+        "description": "Enam kategori artikel: Teknologi, Pendidikan, Gaya Hidup, Bisnis, Opini, Umum.",
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Daftar kategori",
+            "schema": {
+              "$ref": "#/definitions/CategoriesEnvelope"
+            }
+          }
+        }
+      }
+    },
+    "/api/public/posts": {
+      "get": {
+        "tags": [
+          "Publik"
+        ],
+        "summary": "Daftar artikel terbit",
+        "description": "Hanya artikel `is_published=true`, terbaru lebih dulu. Pencarian `q` tidak membedakan huruf besar/kecil pada judul, ringkasan, dan konten.",
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Daftar artikel terbit",
+            "schema": {
+              "$ref": "#/definitions/PostListEnvelope"
+            }
+          },
+          "500": {
+            "description": "Kesalahan server",
+            "schema": {
+              "$ref": "#/definitions/ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "type": "string",
+            "description": "Kata kunci pencarian"
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "type": "string",
+            "enum": [
+              "Teknologi",
+              "Pendidikan",
+              "Gaya Hidup",
+              "Bisnis",
+              "Opini",
+              "Umum"
+            ],
+            "description": "Filter kategori (kosong/Semua = semua kategori)"
+          }
+        ]
+      }
+    },
+    "/api/public/posts/{slug}": {
+      "get": {
+        "tags": [
+          "Publik"
+        ],
+        "summary": "Detail artikel publik",
+        "description": "Artikel terbit berdasarkan slug, lengkap dengan penulis dan reading_time. Draf menghasilkan 404.",
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Detail artikel",
+            "schema": {
+              "$ref": "#/definitions/PostEnvelope"
+            }
+          },
+          "404": {
+            "description": "Artikel tidak ditemukan",
+            "schema": {
+              "$ref": "#/definitions/FailResponse"
+            }
+          },
+          "500": {
+            "description": "Kesalahan server",
+            "schema": {
+              "$ref": "#/definitions/ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "description": "Slug artikel"
+          }
+        ]
+      }
+    },
+    "/api/auth/register": {
+      "post": {
+        "tags": [
+          "Autentikasi"
+        ],
+        "summary": "Registrasi akun",
+        "description": "Membuat akun penulis. Role selalu `member`.",
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "201": {
+            "description": "Registrasi berhasil",
+            "schema": {
+              "$ref": "#/definitions/UserEnvelope"
+            }
+          },
+          "400": {
+            "description": "Input tidak valid",
+            "schema": {
+              "$ref": "#/definitions/FailResponse"
+            }
+          },
+          "409": {
+            "description": "Username/email sudah dipakai",
+            "schema": {
+              "$ref": "#/definitions/FailResponse"
+            }
+          },
+          "500": {
+            "description": "Kesalahan server",
+            "schema": {
+              "$ref": "#/definitions/ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "description": "Payload JSON",
+            "schema": {
+              "$ref": "#/definitions/RegisterRequest"
+            }
+          }
+        ],
+        "consumes": [
+          "application/json"
+        ]
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "tags": [
+          "Autentikasi"
+        ],
+        "summary": "Login",
+        "description": "Mengautentikasi username atau email dan menerbitkan JWT. Pesan gagal tidak membedakan 'pengguna tidak ada' dan 'password salah'.",
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Login berhasil",
+            "schema": {
+              "$ref": "#/definitions/LoginEnvelope"
+            }
+          },
+          "400": {
+            "description": "Input tidak valid",
+            "schema": {
+              "$ref": "#/definitions/FailResponse"
+            }
+          },
+          "401": {
+            "description": "Kredensial salah",
+            "schema": {
+              "$ref": "#/definitions/FailResponse"
+            }
+          },
+          "500": {
+            "description": "Kesalahan server",
+            "schema": {
+              "$ref": "#/definitions/ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "description": "Payload JSON",
+            "schema": {
+              "$ref": "#/definitions/LoginRequest"
+            }
+          }
+        ],
+        "consumes": [
+          "application/json"
+        ]
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "tags": [
+          "Autentikasi"
+        ],
+        "summary": "Logout",
+        "description": "Mengakhiri sesi (JWT stateless: klien menghapus token).",
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Logout berhasil",
+            "schema": {
+              "$ref": "#/definitions/SuccessMessage"
+            }
+          },
+          "401": {
+            "description": "Token tidak ada, tidak valid, atau kedaluwarsa",
+            "schema": {
+              "$ref": "#/definitions/FailResponse"
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/auth/profile": {
+      "get": {
+        "tags": [
+          "Autentikasi"
+        ],
+        "summary": "Ambil profil",
+        "description": "Profil pengguna yang sedang login.",
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Profil",
+            "schema": {
+              "$ref": "#/definitions/UserEnvelope"
+            }
+          },
+          "401": {
+            "description": "Token tidak ada, tidak valid, atau kedaluwarsa",
+            "schema": {
+              "$ref": "#/definitions/FailResponse"
+            }
+          },
+          "500": {
+            "description": "Kesalahan server",
+            "schema": {
+              "$ref": "#/definitions/ErrorResponse"
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "Autentikasi"
+        ],
+        "summary": "Perbarui profil",
+        "description": "Memperbarui username, email, dan (opsional) password.",
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Profil diperbarui",
+            "schema": {
+              "$ref": "#/definitions/UserEnvelope"
+            }
+          },
+          "400": {
+            "description": "Input tidak valid",
+            "schema": {
+              "$ref": "#/definitions/FailResponse"
+            }
+          },
+          "401": {
+            "description": "Token tidak ada, tidak valid, atau kedaluwarsa",
+            "schema": {
+              "$ref": "#/definitions/FailResponse"
+            }
+          },
+          "409": {
+            "description": "Username/email sudah dipakai",
+            "schema": {
+              "$ref": "#/definitions/FailResponse"
+            }
+          },
+          "500": {
+            "description": "Kesalahan server",
+            "schema": {
+              "$ref": "#/definitions/ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "description": "Payload JSON",
+            "schema": {
+              "$ref": "#/definitions/UpdateProfileRequest"
+            }
+          }
+        ],
+        "consumes": [
+          "application/json"
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/posts": {
+      "get": {
+        "tags": [
+          "Penulis"
+        ],
+        "summary": "Artikel milik saya",
+        "description": "Seluruh artikel milik penulis login (terbit dan draf).",
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Daftar artikel",
+            "schema": {
+              "$ref": "#/definitions/PostListEnvelope"
+            }
+          },
+          "401": {
+            "description": "Token tidak ada, tidak valid, atau kedaluwarsa",
+            "schema": {
+              "$ref": "#/definitions/FailResponse"
+            }
+          },
+          "500": {
+            "description": "Kesalahan server",
+            "schema": {
+              "$ref": "#/definitions/ErrorResponse"
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Penulis"
+        ],
+        "summary": "Buat artikel",
+        "description": "Membuat artikel; slug unik otomatis, reading_time dihitung dari konten.",
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "201": {
+            "description": "Artikel dibuat",
+            "schema": {
+              "$ref": "#/definitions/PostEnvelope"
+            }
+          },
+          "400": {
+            "description": "Input tidak valid",
+            "schema": {
+              "$ref": "#/definitions/FailResponse"
+            }
+          },
+          "401": {
+            "description": "Token tidak ada, tidak valid, atau kedaluwarsa",
+            "schema": {
+              "$ref": "#/definitions/FailResponse"
+            }
+          },
+          "500": {
+            "description": "Kesalahan server",
+            "schema": {
+              "$ref": "#/definitions/ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "description": "Payload JSON",
+            "schema": {
+              "$ref": "#/definitions/PostRequest"
+            }
+          }
+        ],
+        "consumes": [
+          "application/json"
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/posts/stats": {
+      "get": {
+        "tags": [
+          "Penulis"
+        ],
+        "summary": "Statistik penulis",
+        "description": "Tiga kartu statistik: total, total_terbit, total_draf; alias total_selesai (= terbit) dan belum_selesai (= draf).",
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Statistik",
+            "schema": {
+              "$ref": "#/definitions/StatsEnvelope"
+            }
+          },
+          "401": {
+            "description": "Token tidak ada, tidak valid, atau kedaluwarsa",
+            "schema": {
+              "$ref": "#/definitions/FailResponse"
+            }
+          },
+          "500": {
+            "description": "Kesalahan server",
+            "schema": {
+              "$ref": "#/definitions/ErrorResponse"
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/posts/ai-generate": {
+      "post": {
+        "tags": [
+          "Penulis"
+        ],
+        "summary": "AI Blog Generator (+ Search Engine)",
+        "description": "Menyusun draf artikel dengan OpenAI. Bila `include_web_search=true`, konteks dari Search Engine disertakan dan sumbernya dikembalikan di `search_sources`. Kegagalan pencarian tidak menggagalkan request. Hasil tidak otomatis disimpan.",
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Draf artikel",
+            "schema": {
+              "$ref": "#/definitions/AIGenerateEnvelope"
+            }
+          },
+          "400": {
+            "description": "Input tidak valid",
+            "schema": {
+              "$ref": "#/definitions/FailResponse"
+            }
+          },
+          "401": {
+            "description": "Token tidak ada, tidak valid, atau kedaluwarsa",
+            "schema": {
+              "$ref": "#/definitions/FailResponse"
+            }
+          },
+          "500": {
+            "description": "Kesalahan server",
+            "schema": {
+              "$ref": "#/definitions/ErrorResponse"
+            }
+          },
+          "502": {
+            "description": "Layanan AI tidak tersedia / gagal",
+            "schema": {
+              "$ref": "#/definitions/ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "description": "Payload JSON",
+            "schema": {
+              "$ref": "#/definitions/AIGenerateRequest"
+            }
+          }
+        ],
+        "consumes": [
+          "application/json"
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/posts/{id}": {
+      "get": {
+        "tags": [
+          "Penulis"
+        ],
+        "summary": "Detail artikel saya",
+        "description": "Hanya artikel milik sendiri; milik orang lain menghasilkan 404.",
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Detail artikel",
+            "schema": {
+              "$ref": "#/definitions/PostEnvelope"
+            }
+          },
+          "400": {
+            "description": "ID tidak valid",
+            "schema": {
+              "$ref": "#/definitions/FailResponse"
+            }
+          },
+          "401": {
+            "description": "Token tidak ada, tidak valid, atau kedaluwarsa",
+            "schema": {
+              "$ref": "#/definitions/FailResponse"
+            }
+          },
+          "404": {
+            "description": "Artikel tidak ditemukan",
+            "schema": {
+              "$ref": "#/definitions/FailResponse"
+            }
+          },
+          "500": {
+            "description": "Kesalahan server",
+            "schema": {
+              "$ref": "#/definitions/ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "integer",
+            "description": "ID artikel"
+          }
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "Penulis"
+        ],
+        "summary": "Perbarui artikel",
+        "description": "Memperbarui title, category, excerpt, content, cover_image_path (dan opsional is_published). Slug dibuat ulang bila judul berubah.",
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Artikel diperbarui",
+            "schema": {
+              "$ref": "#/definitions/PostEnvelope"
+            }
+          },
+          "400": {
+            "description": "Input tidak valid",
+            "schema": {
+              "$ref": "#/definitions/FailResponse"
+            }
+          },
+          "401": {
+            "description": "Token tidak ada, tidak valid, atau kedaluwarsa",
+            "schema": {
+              "$ref": "#/definitions/FailResponse"
+            }
+          },
+          "404": {
+            "description": "Artikel tidak ditemukan",
+            "schema": {
+              "$ref": "#/definitions/FailResponse"
+            }
+          },
+          "500": {
+            "description": "Kesalahan server",
+            "schema": {
+              "$ref": "#/definitions/ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "integer",
+            "description": "ID artikel"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "description": "Payload JSON",
+            "schema": {
+              "$ref": "#/definitions/PostRequest"
+            }
+          }
+        ],
+        "consumes": [
+          "application/json"
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Penulis"
+        ],
+        "summary": "Hapus artikel",
+        "description": "Menghapus artikel milik sendiri.",
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Artikel dihapus",
+            "schema": {
+              "$ref": "#/definitions/SuccessMessage"
+            }
+          },
+          "400": {
+            "description": "ID tidak valid",
+            "schema": {
+              "$ref": "#/definitions/FailResponse"
+            }
+          },
+          "401": {
+            "description": "Token tidak ada, tidak valid, atau kedaluwarsa",
+            "schema": {
+              "$ref": "#/definitions/FailResponse"
+            }
+          },
+          "404": {
+            "description": "Artikel tidak ditemukan",
+            "schema": {
+              "$ref": "#/definitions/FailResponse"
+            }
+          },
+          "500": {
+            "description": "Kesalahan server",
+            "schema": {
+              "$ref": "#/definitions/ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "integer",
+            "description": "ID artikel"
+          }
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/posts/{id}/toggle-publish": {
+      "patch": {
+        "tags": [
+          "Penulis"
+        ],
+        "summary": "Toggle terbit/draf",
+        "description": "Draf → Terbit mengisi published_at; Terbit → Draf mengosongkannya.",
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Status diubah",
+            "schema": {
+              "$ref": "#/definitions/PostEnvelope"
+            }
+          },
+          "400": {
+            "description": "ID tidak valid",
+            "schema": {
+              "$ref": "#/definitions/FailResponse"
+            }
+          },
+          "401": {
+            "description": "Token tidak ada, tidak valid, atau kedaluwarsa",
+            "schema": {
+              "$ref": "#/definitions/FailResponse"
+            }
+          },
+          "404": {
+            "description": "Artikel tidak ditemukan",
+            "schema": {
+              "$ref": "#/definitions/FailResponse"
+            }
+          },
+          "500": {
+            "description": "Kesalahan server",
+            "schema": {
+              "$ref": "#/definitions/ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "integer",
+            "description": "ID artikel"
+          }
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/users": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Direktori pengguna",
+        "description": "Seluruh pengguna beserta total_posts dan total_published. Hanya admin.",
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Daftar pengguna",
+            "schema": {
+              "$ref": "#/definitions/AdminUsersEnvelope"
+            }
+          },
+          "401": {
+            "description": "Token tidak ada, tidak valid, atau kedaluwarsa",
+            "schema": {
+              "$ref": "#/definitions/FailResponse"
+            }
+          },
+          "403": {
+            "description": "Bukan admin",
+            "schema": {
+              "$ref": "#/definitions/FailResponse"
+            }
+          },
+          "500": {
+            "description": "Kesalahan server",
+            "schema": {
+              "$ref": "#/definitions/ErrorResponse"
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/posts": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Arsip seluruh artikel",
+        "description": "Artikel semua penulis (termasuk draf) beserta data penulis. Hanya admin.",
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Daftar artikel",
+            "schema": {
+              "$ref": "#/definitions/PostListEnvelope"
+            }
+          },
+          "401": {
+            "description": "Token tidak ada, tidak valid, atau kedaluwarsa",
+            "schema": {
+              "$ref": "#/definitions/FailResponse"
+            }
+          },
+          "403": {
+            "description": "Bukan admin",
+            "schema": {
+              "$ref": "#/definitions/FailResponse"
+            }
+          },
+          "500": {
+            "description": "Kesalahan server",
+            "schema": {
+              "$ref": "#/definitions/ErrorResponse"
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/users/{id}/posts": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Artikel per pengguna",
+        "description": "Seluruh artikel milik pengguna tertentu. 404 bila pengguna tidak ada. Hanya admin.",
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Daftar artikel",
+            "schema": {
+              "$ref": "#/definitions/PostListEnvelope"
+            }
+          },
+          "400": {
+            "description": "ID tidak valid",
+            "schema": {
+              "$ref": "#/definitions/FailResponse"
+            }
+          },
+          "401": {
+            "description": "Token tidak ada, tidak valid, atau kedaluwarsa",
+            "schema": {
+              "$ref": "#/definitions/FailResponse"
+            }
+          },
+          "403": {
+            "description": "Bukan admin",
+            "schema": {
+              "$ref": "#/definitions/FailResponse"
+            }
+          },
+          "404": {
+            "description": "Pengguna tidak ditemukan",
+            "schema": {
+              "$ref": "#/definitions/FailResponse"
+            }
+          },
+          "500": {
+            "description": "Kesalahan server",
+            "schema": {
+              "$ref": "#/definitions/ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "integer",
+            "description": "ID pengguna"
+          }
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "FailResponse": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "example": "fail",
+          "enum": [
+            "fail"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "example": "Pesan kesalahan klien (4xx)"
+        }
+      },
+      "description": "Respons kegagalan klien (HTTP 4xx)."
+    },
+    "ErrorResponse": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "example": "error",
+          "enum": [
+            "error"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "example": "Terjadi kesalahan pada server"
+        }
+      },
+      "description": "Respons kesalahan server (HTTP 5xx)."
+    },
+    "SuccessMessage": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "example": "success",
+          "enum": [
+            "success"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "example": "Operasi berhasil"
+        }
+      },
+      "description": "Respons sukses tanpa data."
+    },
+    "User": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "example": 2
+        },
+        "username": {
+          "type": "string",
+          "example": "member"
+        },
+        "email": {
+          "type": "string",
+          "example": "member@delcom.org"
+        },
+        "role": {
+          "type": "string",
+          "example": "member",
+          "enum": [
+            "member",
+            "admin"
+          ]
+        },
+        "created_at": {
+          "type": "string",
+          "example": "2026-11-19T08:00:00Z",
+          "format": "date-time"
+        }
+      }
+    },
+    "LoginData": {
+      "type": "object",
+      "properties": {
+        "token": {
+          "type": "string",
+          "description": "JWT Bearer (berlaku 24 jam; berisi user_id, username, role)",
+          "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        },
+        "user": {
+          "$ref": "#/definitions/User"
+        }
+      }
+    },
+    "Author": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "example": 1
+        },
+        "username": {
+          "type": "string",
+          "example": "admin"
+        }
+      }
+    },
+    "Post": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "example": 12
+        },
+        "user_id": {
+          "type": "integer",
+          "example": 2
+        },
+        "title": {
+          "type": "string",
+          "example": "Mengenal Clean Architecture pada Aplikasi Go"
+        },
+        "slug": {
+          "type": "string",
+          "description": "Slug unik; tabrakan diberi sufiks -2, -3, dst.",
+          "example": "mengenal-clean-architecture-pada-aplikasi-go"
+        },
+        "category": {
+          "type": "string",
+          "example": "Teknologi",
+          "enum": [
+            "Teknologi",
+            "Pendidikan",
+            "Gaya Hidup",
+            "Bisnis",
+            "Opini",
+            "Umum"
+          ]
+        },
+        "excerpt": {
+          "type": "string",
+          "example": "Memisahkan handler, service, dan repository."
+        },
+        "content": {
+          "type": "string",
+          "description": "Isi artikel dalam Markdown",
+          "example": "# Judul\n\nIsi artikel..."
+        },
+        "cover_image_path": {
+          "type": "string",
+          "description": "URL/teks lokasi gambar sampul (tidak ada endpoint upload)",
+          "example": "https://contoh.id/cover.jpg"
+        },
+        "is_published": {
+          "type": "boolean",
+          "example": true
+        },
+        "published_at": {
+          "type": "string",
+          "description": "null bila draf",
+          "example": "2026-11-19T08:00:00Z",
+          "format": "date-time"
+        },
+        "reading_time": {
+          "type": "integer",
+          "description": "Estimasi menit baca = ceil(jumlah kata / 200), minimal 1",
+          "example": 3
+        },
+        "author": {
+          "$ref": "#/definitions/Author"
+        },
+        "created_at": {
+          "type": "string",
+          "example": "2026-11-19T08:00:00Z",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "example": "2026-11-19T08:00:00Z",
+          "format": "date-time"
+        }
+      }
+    },
+    "PostRequest": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Wajib, maksimal 255 karakter",
+          "example": "Belajar Go untuk Pemula"
+        },
+        "category": {
+          "type": "string",
+          "description": "Salah satu dari 6 kategori; kosong = Umum; di luar daftar = 400",
+          "example": "Teknologi",
+          "enum": [
+            "Teknologi",
+            "Pendidikan",
+            "Gaya Hidup",
+            "Bisnis",
+            "Opini",
+            "Umum"
+          ]
+        },
+        "excerpt": {
+          "type": "string",
+          "description": "Ringkasan 1-2 kalimat",
+          "example": "Panduan singkat memulai Go."
+        },
+        "content": {
+          "type": "string",
+          "description": "Wajib, Markdown",
+          "example": "# Halo\n\nIsi artikel."
+        },
+        "cover_image_path": {
+          "type": "string",
+          "example": "https://contoh.id/cover.jpg"
+        },
+        "is_published": {
+          "type": "boolean",
+          "description": "Opsional; menjaga konsistensi published_at",
+          "example": false
+        }
+      },
+      "required": [
+        "title",
+        "content"
+      ]
+    },
+    "Stats": {
+      "type": "object",
+      "properties": {
+        "total": {
+          "type": "integer",
+          "description": "Total artikel",
+          "example": 5
+        },
+        "total_terbit": {
+          "type": "integer",
+          "example": 3
+        },
+        "total_draf": {
+          "type": "integer",
+          "example": 2
+        },
+        "total_selesai": {
+          "type": "integer",
+          "description": "Alias total_terbit (istilah skrip)",
+          "example": 3
+        },
+        "belum_selesai": {
+          "type": "integer",
+          "description": "Alias total_draf (istilah skrip)",
+          "example": 2
+        }
+      }
+    },
+    "AdminUser": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "example": 2
+        },
+        "username": {
+          "type": "string",
+          "example": "member"
+        },
+        "email": {
+          "type": "string",
+          "example": "member@delcom.org"
+        },
+        "role": {
+          "type": "string",
+          "example": "member"
+        },
+        "total_posts": {
+          "type": "integer",
+          "example": 4
+        },
+        "total_published": {
+          "type": "integer",
+          "example": 2
+        },
+        "created_at": {
+          "type": "string",
+          "example": "2026-11-19T08:00:00Z",
+          "format": "date-time"
+        }
+      }
+    },
+    "RegisterRequest": {
+      "type": "object",
+      "properties": {
+        "username": {
+          "type": "string",
+          "description": "3-50 karakter: huruf, angka, titik, garis bawah, strip",
+          "example": "budi"
+        },
+        "email": {
+          "type": "string",
+          "example": "budi@contoh.id"
+        },
+        "password": {
+          "type": "string",
+          "description": "Minimal 6 karakter (maks 72 byte)",
+          "example": "rahasia123"
+        }
+      },
+      "required": [
+        "username",
+        "email",
+        "password"
+      ],
+      "description": "Role selalu 'member'; field role pada payload diabaikan."
+    },
+    "LoginRequest": {
+      "type": "object",
+      "properties": {
+        "username": {
+          "type": "string",
+          "description": "Username ATAU email",
+          "example": "member"
+        },
+        "password": {
+          "type": "string",
+          "example": "member"
+        }
+      },
+      "required": [
+        "username",
+        "password"
+      ]
+    },
+    "UpdateProfileRequest": {
+      "type": "object",
+      "properties": {
+        "username": {
+          "type": "string",
+          "example": "budi"
+        },
+        "email": {
+          "type": "string",
+          "example": "budi@contoh.id"
+        },
+        "password": {
+          "type": "string",
+          "description": "Opsional; kosongkan bila tidak diganti",
+          "example": ""
+        }
+      },
+      "required": [
+        "username",
+        "email"
+      ]
+    },
+    "AIGenerateRequest": {
+      "type": "object",
+      "properties": {
+        "topic": {
+          "type": "string",
+          "description": "Wajib, maksimal 300 karakter",
+          "example": "Dampak AI terhadap pendidikan tinggi di Indonesia"
+        },
+        "category": {
+          "type": "string",
+          "description": "Opsional; petunjuk kategori",
+          "example": "Pendidikan",
+          "enum": [
+            "Teknologi",
+            "Pendidikan",
+            "Gaya Hidup",
+            "Bisnis",
+            "Opini",
+            "Umum"
+          ]
+        },
+        "include_web_search": {
+          "type": "boolean",
+          "description": "true = konteks penelusuran Search Engine disertakan",
+          "example": true
+        }
+      },
+      "required": [
+        "topic"
+      ]
+    },
+    "SearchSource": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "example": "Judul sumber"
+        },
+        "url": {
+          "type": "string",
+          "example": "https://contoh.id/sumber"
+        },
+        "snippet": {
+          "type": "string",
+          "example": "Cuplikan teks sumber"
+        }
+      }
+    },
+    "AIGenerateData": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "example": "Judul dari AI"
+        },
+        "category": {
+          "type": "string",
+          "example": "Pendidikan",
+          "enum": [
+            "Teknologi",
+            "Pendidikan",
+            "Gaya Hidup",
+            "Bisnis",
+            "Opini",
+            "Umum"
+          ]
+        },
+        "excerpt": {
+          "type": "string",
+          "example": "Ringkasan."
+        },
+        "content": {
+          "type": "string",
+          "description": "Markdown berbahasa Indonesia (disertai '## Referensi' bila ada konteks web)",
+          "example": "## Pendahuluan\n..."
+        },
+        "search_sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SearchSource"
+          }
+        }
+      },
+      "description": "Hasil TIDAK otomatis disimpan; klien menampilkan pratinjau lalu menerapkannya ke editor."
+    },
+    "UserEnvelope": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "example": "success",
+          "enum": [
+            "success"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "example": "Profil berhasil diambil"
+        },
+        "data": {
+          "$ref": "#/definitions/User"
+        }
+      }
+    },
+    "LoginEnvelope": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "example": "success",
+          "enum": [
+            "success"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "example": "Login berhasil"
+        },
+        "data": {
+          "$ref": "#/definitions/LoginData"
+        }
+      }
+    },
+    "CategoriesEnvelope": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "example": "success",
+          "enum": [
+            "success"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "example": "Kategori berhasil diambil"
+        },
+        "data": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "example": "Teknologi",
+            "enum": [
+              "Teknologi",
+              "Pendidikan",
+              "Gaya Hidup",
+              "Bisnis",
+              "Opini",
+              "Umum"
+            ]
+          }
+        }
+      }
+    },
+    "PostEnvelope": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "example": "success",
+          "enum": [
+            "success"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "example": "Artikel berhasil diambil"
+        },
+        "data": {
+          "$ref": "#/definitions/Post"
+        }
+      }
+    },
+    "PostListEnvelope": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "example": "success",
+          "enum": [
+            "success"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "example": "Artikel berhasil diambil"
+        },
+        "data": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Post"
+          }
+        }
+      }
+    },
+    "StatsEnvelope": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "example": "success",
+          "enum": [
+            "success"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "example": "Statistik berhasil diambil"
+        },
+        "data": {
+          "$ref": "#/definitions/Stats"
+        }
+      }
+    },
+    "AdminUsersEnvelope": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "example": "success",
+          "enum": [
+            "success"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "example": "Pengguna berhasil diambil"
+        },
+        "data": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/AdminUser"
+          }
+        }
+      }
+    },
+    "AIGenerateEnvelope": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "example": "success",
+          "enum": [
+            "success"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "example": "Draf artikel berhasil dibuat"
+        },
+        "data": {
+          "$ref": "#/definitions/AIGenerateData"
+        }
+      }
+    }
+  }
+}
