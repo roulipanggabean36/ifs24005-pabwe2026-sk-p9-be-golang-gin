@@ -49,7 +49,7 @@ var (
 
 // Service memuat logika bisnis autentikasi.
 type Service interface {
-	Register(req RegisterRequest) (*UserResponse, error)
+	Register(req RegisterRequest) (*LoginResponse, error)
 	Login(req LoginRequest) (*LoginResponse, error)
 	GetProfile(userID uint) (*UserResponse, error)
 	UpdateProfile(userID uint, req UpdateProfileRequest) (*UserResponse, error)
@@ -67,7 +67,6 @@ func NewService(repo Repository, secret string) Service {
 
 func validateIdentity(username, email string) (string, string, error) {
 	username = strings.TrimSpace(username)
-	email = strings.ToLower(strings.TrimSpace(email))
 
 	if username == "" {
 		return "", "", &ValidationError{"Username wajib diisi"}
@@ -78,13 +77,30 @@ func validateIdentity(username, email string) (string, string, error) {
 	if !usernameRe.MatchString(username) {
 		return "", "", &ValidationError{"Username hanya boleh berisi huruf, angka, titik, garis bawah, dan strip"}
 	}
-	if email == "" {
-		return "", "", &ValidationError{"Email wajib diisi"}
-	}
-	if len(email) > 255 || !emailRe.MatchString(email) {
-		return "", "", &ValidationError{"Format email tidak valid"}
+	email, err := validateEmail(email)
+	if err != nil {
+		return "", "", err
 	}
 	return username, email, nil
+}
+
+func validateEmail(email string) (string, error) {
+	email = strings.ToLower(strings.TrimSpace(email))
+	if email == "" {
+		return "", &ValidationError{"Email wajib diisi"}
+	}
+	if len(email) > 255 || !emailRe.MatchString(email) {
+		return "", &ValidationError{"Format email tidak valid"}
+	}
+	return email, nil
+}
+
+// normalizeRole hanya menerima "admin"; nilai lain (termasuk kosong) menjadi "member".
+func normalizeRole(role string) string {
+	if strings.EqualFold(strings.TrimSpace(role), database.RoleAdmin) {
+		return database.RoleAdmin
+	}
+	return database.RoleMember
 }
 
 func validatePassword(password string) error {
@@ -105,7 +121,11 @@ func (s *service) ensureUnique(username, email string, excludeID uint) error {
 	if taken {
 		return &ConflictError{"Username sudah digunakan"}
 	}
-	taken, err = s.repo.ExistsByEmail(email, excludeID)
+	return s.ensureEmailFree(email, excludeID)
+}
+
+func (s *service) ensureEmailFree(email string, excludeID uint) error {
+	taken, err := s.repo.ExistsByEmail(email, excludeID)
 	if err != nil {
 		return err
 	}
@@ -115,7 +135,7 @@ func (s *service) ensureUnique(username, email string, excludeID uint) error {
 	return nil
 }
 
-func (s *service) Register(req RegisterRequest) (*UserResponse, error) {
+func (s *service) Register(req RegisterRequest) (*LoginResponse, error) {
 	username, email, err := validateIdentity(req.Username, req.Email)
 	if err != nil {
 		return nil, err
@@ -131,12 +151,11 @@ func (s *service) Register(req RegisterRequest) (*UserResponse, error) {
 		return nil, err
 	}
 
-	user := &database.User{Username: username, Email: email, Password: string(hash), Role: database.RoleMember}
+	user := &database.User{Username: username, Email: email, Password: string(hash), Role: normalizeRole(req.Role)}
 	if err := s.repo.Create(user); err != nil {
 		return nil, err
 	}
-	res := ToUserResponse(user)
-	return &res, nil
+	return s.issueToken(user)
 }
 
 func (s *service) Login(req LoginRequest) (*LoginResponse, error) {
@@ -160,6 +179,11 @@ func (s *service) Login(req LoginRequest) (*LoginResponse, error) {
 		return nil, InvalidCredentialsError{}
 	}
 
+	return s.issueToken(user)
+}
+
+// issueToken menandatangani JWT untuk pengguna dan membungkusnya bersama profilnya.
+func (s *service) issueToken(user *database.User) (*LoginResponse, error) {
 	claims := &middleware.Claims{
 		UserID: user.ID, Username: user.Username, Role: user.Role,
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -188,7 +212,7 @@ func (s *service) UpdateProfile(userID uint, req UpdateProfileRequest) (*UserRes
 	if err != nil {
 		return nil, err
 	}
-	username, email, err := validateIdentity(req.Username, req.Email)
+	email, err := validateEmail(req.Email)
 	if err != nil {
 		return nil, err
 	}
@@ -197,11 +221,11 @@ func (s *service) UpdateProfile(userID uint, req UpdateProfileRequest) (*UserRes
 			return nil, err
 		}
 	}
-	if err := s.ensureUnique(username, email, userID); err != nil {
+	if err := s.ensureEmailFree(email, userID); err != nil {
 		return nil, err
 	}
 
-	user.Username, user.Email = username, email
+	user.Email = email
 	if req.Password != "" {
 		hash, err := hashPassword([]byte(req.Password), bcrypt.DefaultCost)
 		if err != nil {

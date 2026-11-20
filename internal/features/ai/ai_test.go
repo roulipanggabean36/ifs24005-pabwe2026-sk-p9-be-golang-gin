@@ -300,9 +300,9 @@ func TestServiceValidation(t *testing.T) {
 		require.ErrorAs(t, err, &ve)
 	}
 	_, err := svc.Generate(ctx, GenerateRequest{Topic: ""})
-	assert.EqualError(t, err, "Topik wajib diisi")
+	assert.EqualError(t, err, "Field topic wajib diisi")
 	_, err = svc.Generate(ctx, GenerateRequest{Topic: strings.Repeat("a", 301)})
-	assert.EqualError(t, err, "Topik maksimal 300 karakter")
+	assert.EqualError(t, err, "Field topic maksimal 300 karakter")
 }
 
 func TestServiceUpstreamErrors(t *testing.T) {
@@ -310,13 +310,13 @@ func TestServiceUpstreamErrors(t *testing.T) {
 
 	_, err := NewService(&stubChat{accessErr: errBoom}, &stubSearch{}).Generate(ctx, GenerateRequest{Topic: "x"})
 	require.ErrorAs(t, err, &se)
-	assert.Equal(t, 502, se.Status)
+	assert.Equal(t, 500, se.Status)
 	assert.ErrorIs(t, err, errBoom)
-	assert.Equal(t, "Layanan AI sedang tidak tersedia. Silakan coba lagi nanti.", se.Error())
+	assert.Equal(t, "Layanan OpenAI sedang tidak tersedia. Silakan coba lagi nanti.", se.Error())
 
 	_, err = NewService(&stubChat{genErr: errBoom}, &stubSearch{}).Generate(ctx, GenerateRequest{Topic: "x"})
 	require.ErrorAs(t, err, &se)
-	assert.Equal(t, "Gagal menghasilkan artikel dengan AI. Silakan coba lagi.", se.Error())
+	assert.Equal(t, "Gagal menghasilkan artikel dengan OpenAI. Silakan coba lagi.", se.Error())
 }
 
 func TestServiceSearchFlow(t *testing.T) {

@@ -9,8 +9,9 @@ import (
 )
 
 const (
-	maxTopicRunes    = 300
-	statusBadGateway = 502
+	maxTopicRunes = 300
+	// upstreamStatus adalah status HTTP bila OpenAI tidak dapat dipakai.
+	upstreamStatus = 500
 )
 
 // ValidationError menandakan input tidak valid (HTTP 400).
@@ -46,16 +47,16 @@ func NewService(chat ChatClient, search SearchClient) Service {
 func (s *service) Generate(ctx context.Context, req GenerateRequest) (*GenerateResponse, error) {
 	topic := strings.TrimSpace(req.Topic)
 	if topic == "" {
-		return nil, &ValidationError{"Topik wajib diisi"}
+		return nil, &ValidationError{"Field topic wajib diisi"}
 	}
 	if utf8.RuneCountInString(topic) > maxTopicRunes {
-		return nil, &ValidationError{"Topik maksimal 300 karakter"}
+		return nil, &ValidationError{"Field topic maksimal 300 karakter"}
 	}
 	// Kategori input hanyalah petunjuk; nilai yang tidak dikenal diabaikan.
 	inputCategory, _ := post.NormalizeCategory(req.Category)
 
 	if err := s.chat.CheckAccess(ctx); err != nil {
-		return nil, &ServiceError{Status: statusBadGateway, Message: "Layanan AI sedang tidak tersedia. Silakan coba lagi nanti.", Err: err}
+		return nil, &ServiceError{Status: upstreamStatus, Message: "Layanan OpenAI sedang tidak tersedia. Silakan coba lagi nanti.", Err: err}
 	}
 
 	// Kegagalan penelusuran web tidak menggagalkan request: lanjut tanpa konteks web.
@@ -68,7 +69,7 @@ func (s *service) Generate(ctx context.Context, req GenerateRequest) (*GenerateR
 
 	article, err := s.chat.GenerateArticle(ctx, topic, inputCategory, sources)
 	if err != nil {
-		return nil, &ServiceError{Status: statusBadGateway, Message: "Gagal menghasilkan artikel dengan AI. Silakan coba lagi.", Err: err}
+		return nil, &ServiceError{Status: upstreamStatus, Message: "Gagal menghasilkan artikel dengan OpenAI. Silakan coba lagi.", Err: err}
 	}
 
 	category := post.DefaultCategory

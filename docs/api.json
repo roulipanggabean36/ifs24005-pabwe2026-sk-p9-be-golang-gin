@@ -122,7 +122,7 @@
           "200": {
             "description": "Daftar artikel terbit",
             "schema": {
-              "$ref": "#/definitions/PostListEnvelope"
+              "$ref": "#/definitions/PublicPostListEnvelope"
             }
           },
           "500": {
@@ -170,7 +170,7 @@
           "200": {
             "description": "Detail artikel",
             "schema": {
-              "$ref": "#/definitions/PostEnvelope"
+              "$ref": "#/definitions/PublicPostEnvelope"
             }
           },
           "404": {
@@ -203,7 +203,7 @@
           "Autentikasi"
         ],
         "summary": "Registrasi akun",
-        "description": "Membuat akun penulis. Role selalu `member`.",
+        "description": "Membuat akun penulis dan langsung mengembalikan token JWT. Field `role` opsional: hanya `admin` atau `member` yang diterima, nilai lain dipaksa `member`.",
         "produces": [
           "application/json"
         ],
@@ -211,17 +211,11 @@
           "201": {
             "description": "Registrasi berhasil",
             "schema": {
-              "$ref": "#/definitions/UserEnvelope"
+              "$ref": "#/definitions/LoginEnvelope"
             }
           },
           "400": {
-            "description": "Input tidak valid",
-            "schema": {
-              "$ref": "#/definitions/FailResponse"
-            }
-          },
-          "409": {
-            "description": "Username/email sudah dipakai",
+            "description": "Input tidak valid, atau username/email sudah dipakai",
             "schema": {
               "$ref": "#/definitions/FailResponse"
             }
@@ -385,19 +379,13 @@
             }
           },
           "400": {
-            "description": "Input tidak valid",
+            "description": "Input tidak valid, atau email sudah dipakai",
             "schema": {
               "$ref": "#/definitions/FailResponse"
             }
           },
           "401": {
             "description": "Token tidak ada, tidak valid, atau kedaluwarsa",
-            "schema": {
-              "$ref": "#/definitions/FailResponse"
-            }
-          },
-          "409": {
-            "description": "Username/email sudah dipakai",
             "schema": {
               "$ref": "#/definitions/FailResponse"
             }
@@ -528,7 +516,7 @@
           "Penulis"
         ],
         "summary": "Statistik penulis",
-        "description": "Tiga kartu statistik: total, total_terbit, total_draf; alias total_selesai (= terbit) dan belum_selesai (= draf).",
+        "description": "Tiga kartu statistik: total_articles, total_terbit, total_draf; alias total_selesai (= terbit) dan belum_selesai (= draf).",
         "produces": [
           "application/json"
         ],
@@ -589,13 +577,7 @@
             }
           },
           "500": {
-            "description": "Kesalahan server",
-            "schema": {
-              "$ref": "#/definitions/ErrorResponse"
-            }
-          },
-          "502": {
-            "description": "Layanan AI tidak tersedia / gagal",
+            "description": "OpenAI tidak tersedia / gagal, atau kesalahan server",
             "schema": {
               "$ref": "#/definitions/ErrorResponse"
             }
@@ -647,6 +629,12 @@
           },
           "401": {
             "description": "Token tidak ada, tidak valid, atau kedaluwarsa",
+            "schema": {
+              "$ref": "#/definitions/FailResponse"
+            }
+          },
+          "403": {
+            "description": "Artikel milik pengguna lain",
             "schema": {
               "$ref": "#/definitions/FailResponse"
             }
@@ -703,6 +691,12 @@
           },
           "401": {
             "description": "Token tidak ada, tidak valid, atau kedaluwarsa",
+            "schema": {
+              "$ref": "#/definitions/FailResponse"
+            }
+          },
+          "403": {
+            "description": "Artikel milik pengguna lain",
             "schema": {
               "$ref": "#/definitions/FailResponse"
             }
@@ -775,6 +769,12 @@
               "$ref": "#/definitions/FailResponse"
             }
           },
+          "403": {
+            "description": "Artikel milik pengguna lain",
+            "schema": {
+              "$ref": "#/definitions/FailResponse"
+            }
+          },
           "404": {
             "description": "Artikel tidak ditemukan",
             "schema": {
@@ -833,6 +833,12 @@
               "$ref": "#/definitions/FailResponse"
             }
           },
+          "403": {
+            "description": "Artikel milik pengguna lain",
+            "schema": {
+              "$ref": "#/definitions/FailResponse"
+            }
+          },
           "404": {
             "description": "Artikel tidak ditemukan",
             "schema": {
@@ -868,7 +874,7 @@
           "Admin"
         ],
         "summary": "Direktori pengguna",
-        "description": "Seluruh pengguna beserta total_posts dan total_published. Hanya admin.",
+        "description": "Seluruh pengguna beserta total_articles dan total_published. Hanya admin.",
         "produces": [
           "application/json"
         ],
@@ -979,12 +985,6 @@
           },
           "403": {
             "description": "Bukan admin",
-            "schema": {
-              "$ref": "#/definitions/FailResponse"
-            }
-          },
-          "404": {
-            "description": "Pengguna tidak ditemukan",
             "schema": {
               "$ref": "#/definitions/FailResponse"
             }
@@ -1246,7 +1246,7 @@
     "Stats": {
       "type": "object",
       "properties": {
-        "total": {
+        "total_articles": {
           "type": "integer",
           "description": "Total artikel",
           "example": 5
@@ -1290,7 +1290,7 @@
           "type": "string",
           "example": "member"
         },
-        "total_posts": {
+        "total_articles": {
           "type": "integer",
           "example": 4
         },
@@ -1321,6 +1321,15 @@
           "type": "string",
           "description": "Minimal 6 karakter (maks 72 byte)",
           "example": "rahasia123"
+        },
+        "role": {
+          "type": "string",
+          "description": "Opsional: 'admin' atau 'member'; selain itu dipaksa 'member'",
+          "enum": [
+            "admin",
+            "member"
+          ],
+          "example": "member"
         }
       },
       "required": [
@@ -1328,7 +1337,7 @@
         "email",
         "password"
       ],
-      "description": "Role selalu 'member'; field role pada payload diabaikan."
+      "description": "Field role opsional; hanya 'admin' atau 'member' yang diterima."
     },
     "LoginRequest": {
       "type": "object",
@@ -1351,10 +1360,6 @@
     "UpdateProfileRequest": {
       "type": "object",
       "properties": {
-        "username": {
-          "type": "string",
-          "example": "budi"
-        },
         "email": {
           "type": "string",
           "example": "budi@contoh.id"
@@ -1366,9 +1371,9 @@
         }
       },
       "required": [
-        "username",
         "email"
-      ]
+      ],
+      "description": "Hanya email dan password yang dapat diubah; username tidak berubah."
     },
     "AIGenerateRequest": {
       "type": "object",
@@ -1622,6 +1627,121 @@
         },
         "data": {
           "$ref": "#/definitions/AIGenerateData"
+        }
+      }
+    },
+    "PublicPost": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "example": 12
+        },
+        "title": {
+          "type": "string",
+          "example": "Mengenal Clean Architecture pada Aplikasi Go"
+        },
+        "slug": {
+          "type": "string",
+          "description": "Slug unik; tabrakan diberi sufiks -2, -3, dst.",
+          "example": "mengenal-clean-architecture-pada-aplikasi-go"
+        },
+        "category": {
+          "type": "string",
+          "example": "Teknologi",
+          "enum": [
+            "Teknologi",
+            "Pendidikan",
+            "Gaya Hidup",
+            "Bisnis",
+            "Opini",
+            "Umum"
+          ]
+        },
+        "excerpt": {
+          "type": "string",
+          "example": "Memisahkan handler, service, dan repository."
+        },
+        "content": {
+          "type": "string",
+          "description": "Isi artikel dalam Markdown",
+          "example": "# Judul\n\nIsi artikel..."
+        },
+        "cover_image_path": {
+          "type": "string",
+          "description": "URL/teks lokasi gambar sampul (tidak ada endpoint upload)",
+          "example": "https://contoh.id/cover.jpg"
+        },
+        "is_published": {
+          "type": "boolean",
+          "example": true
+        },
+        "published_at": {
+          "type": "string",
+          "description": "null bila draf",
+          "example": "2026-11-19T08:00:00Z",
+          "format": "date-time"
+        },
+        "reading_time": {
+          "type": "integer",
+          "description": "Estimasi menit baca = ceil(jumlah kata / 200), minimal 1",
+          "example": 3
+        },
+        "created_at": {
+          "type": "string",
+          "example": "2026-11-19T08:00:00Z",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "example": "2026-11-19T08:00:00Z",
+          "format": "date-time"
+        },
+        "author_name": {
+          "type": "string",
+          "description": "Nama penulis",
+          "example": "member"
+        }
+      }
+    },
+    "PublicPostEnvelope": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "example": "success",
+          "enum": [
+            "success"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "example": "Artikel berhasil diambil"
+        },
+        "data": {
+          "$ref": "#/definitions/PublicPost"
+        }
+      }
+    },
+    "PublicPostListEnvelope": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "example": "success",
+          "enum": [
+            "success"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "example": "Artikel berhasil diambil"
+        },
+        "data": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PublicPost"
+          }
         }
       }
     }

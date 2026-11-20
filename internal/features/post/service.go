@@ -315,10 +315,9 @@ func (s *service) AdminPosts() ([]PostResponse, error) {
 	return toResponses(posts), nil
 }
 
+// AdminUserPosts mengembalikan artikel milik userID; pengguna yang tidak ada
+// menghasilkan daftar kosong (bukan galat).
 func (s *service) AdminUserPosts(userID uint) ([]PostResponse, error) {
-	if _, err := s.repo.FindUser(userID); err != nil {
-		return nil, err
-	}
 	posts, err := s.repo.ListByUser(userID)
 	if err != nil {
 		return nil, err

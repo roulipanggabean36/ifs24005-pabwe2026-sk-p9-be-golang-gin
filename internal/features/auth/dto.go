@@ -6,12 +6,13 @@ import (
 	"app/internal/database"
 )
 
-// RegisterRequest adalah payload pendaftaran. Field role pada payload diabaikan
-// (tidak dideklarasikan) sehingga akun baru selalu berperan member.
+// RegisterRequest adalah payload pendaftaran. Field role bersifat opsional:
+// hanya "admin" atau "member" yang diterima, nilai lain dipaksa menjadi "member".
 type RegisterRequest struct {
 	Username string `json:"username"`
 	Email    string `json:"email"`
 	Password string `json:"password"`
+	Role     string `json:"role"`
 }
 
 // LoginRequest menerima username ATAU email pada field username.
@@ -20,9 +21,9 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
-// UpdateProfileRequest adalah payload pembaruan profil; password bersifat opsional.
+// UpdateProfileRequest adalah payload pembaruan profil: hanya email dan password
+// (opsional). Username tidak dapat diubah.
 type UpdateProfileRequest struct {
-	Username string `json:"username"`
 	Email    string `json:"email"`
 	Password string `json:"password"`
 }

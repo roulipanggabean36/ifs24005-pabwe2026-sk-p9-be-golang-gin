@@ -1,8 +1,8 @@
 swagger: '2.0'
 info:
   title: Delcom Blog REST API
-  description: Dokumentasi RESTful API Delcom Blog (Golang Gin, Clean Architecture & Feature-First) dengan AI Blog Generator
-    terintegrasi Search Engine. Seluruh respons berformat {status, message, data?}.
+  description: Dokumentasi RESTful API Delcom Blog (Golang Gin, Clean Architecture & Feature-First) dengan
+    AI Blog Generator terintegrasi Search Engine. Seluruh respons berformat {status, message, data?}.
   version: 1.0.0
   contact:
     name: Delcom - Labs
@@ -32,7 +32,8 @@ paths:
       tags:
       - Dokumentasi
       summary: Swagger UI
-      description: Dokumentasi interaktif Swagger UI (http://localhost:8081/swagger/index.html). `/swagger` dialihkan ke `/swagger/index.html`.
+      description: Dokumentasi interaktif Swagger UI (http://localhost:8081/swagger/index.html). `/swagger`
+        dialihkan ke `/swagger/index.html`.
       produces:
       - application/json
       responses:
@@ -49,8 +50,8 @@ paths:
       tags:
       - Dokumentasi
       summary: Spesifikasi OpenAPI dinamis
-      description: Spesifikasi OpenAPI/Swagger JSON; host dan scheme menyesuaikan request (menghormati X-Forwarded-Host dan
-        X-Forwarded-Proto).
+      description: Spesifikasi OpenAPI/Swagger JSON; host dan scheme menyesuaikan request (menghormati
+        X-Forwarded-Host dan X-Forwarded-Proto).
       produces:
       - application/json
       responses:
@@ -74,15 +75,15 @@ paths:
       tags:
       - Publik
       summary: Daftar artikel terbit
-      description: Hanya artikel `is_published=true`, terbaru lebih dulu. Pencarian `q` tidak membedakan huruf besar/kecil
-        pada judul, ringkasan, dan konten.
+      description: Hanya artikel `is_published=true`, terbaru lebih dulu. Pencarian `q` tidak membedakan
+        huruf besar/kecil pada judul, ringkasan, dan konten.
       produces:
       - application/json
       responses:
         '200':
           description: Daftar artikel terbit
           schema:
-            $ref: '#/definitions/PostListEnvelope'
+            $ref: '#/definitions/PublicPostListEnvelope'
         '500':
           description: Kesalahan server
           schema:
@@ -108,14 +109,15 @@ paths:
       tags:
       - Publik
       summary: Detail artikel publik
-      description: Artikel terbit berdasarkan slug, lengkap dengan penulis dan reading_time. Draf menghasilkan 404.
+      description: Artikel terbit berdasarkan slug, lengkap dengan penulis dan reading_time. Draf menghasilkan
+        404.
       produces:
       - application/json
       responses:
         '200':
           description: Detail artikel
           schema:
-            $ref: '#/definitions/PostEnvelope'
+            $ref: '#/definitions/PublicPostEnvelope'
         '404':
           description: Artikel tidak ditemukan
           schema:
@@ -135,20 +137,17 @@ paths:
       tags:
       - Autentikasi
       summary: Registrasi akun
-      description: Membuat akun penulis. Role selalu `member`.
+      description: 'Membuat akun penulis dan langsung mengembalikan token JWT. Field `role` opsional:
+        hanya `admin` atau `member` yang diterima, nilai lain dipaksa `member`.'
       produces:
       - application/json
       responses:
         '201':
           description: Registrasi berhasil
           schema:
-            $ref: '#/definitions/UserEnvelope'
+            $ref: '#/definitions/LoginEnvelope'
         '400':
-          description: Input tidak valid
-          schema:
-            $ref: '#/definitions/FailResponse'
-        '409':
-          description: Username/email sudah dipakai
+          description: Input tidak valid, atau username/email sudah dipakai
           schema:
             $ref: '#/definitions/FailResponse'
         '500':
@@ -169,8 +168,8 @@ paths:
       tags:
       - Autentikasi
       summary: Login
-      description: Mengautentikasi username atau email dan menerbitkan JWT. Pesan gagal tidak membedakan 'pengguna tidak ada'
-        dan 'password salah'.
+      description: Mengautentikasi username atau email dan menerbitkan JWT. Pesan gagal tidak membedakan
+        'pengguna tidak ada' dan 'password salah'.
       produces:
       - application/json
       responses:
@@ -254,15 +253,11 @@ paths:
           schema:
             $ref: '#/definitions/UserEnvelope'
         '400':
-          description: Input tidak valid
+          description: Input tidak valid, atau email sudah dipakai
           schema:
             $ref: '#/definitions/FailResponse'
         '401':
           description: Token tidak ada, tidak valid, atau kedaluwarsa
-          schema:
-            $ref: '#/definitions/FailResponse'
-        '409':
-          description: Username/email sudah dipakai
           schema:
             $ref: '#/definitions/FailResponse'
         '500':
@@ -343,8 +338,8 @@ paths:
       tags:
       - Penulis
       summary: Statistik penulis
-      description: 'Tiga kartu statistik: total, total_terbit, total_draf; alias total_selesai (= terbit) dan belum_selesai
-        (= draf).'
+      description: 'Tiga kartu statistik: total_articles, total_terbit, total_draf; alias total_selesai
+        (= terbit) dan belum_selesai (= draf).'
       produces:
       - application/json
       responses:
@@ -367,9 +362,9 @@ paths:
       tags:
       - Penulis
       summary: AI Blog Generator (+ Search Engine)
-      description: Menyusun draf artikel dengan OpenAI. Bila `include_web_search=true`, konteks dari Search Engine disertakan
-        dan sumbernya dikembalikan di `search_sources`. Kegagalan pencarian tidak menggagalkan request. Hasil tidak otomatis
-        disimpan.
+      description: Menyusun draf artikel dengan OpenAI. Bila `include_web_search=true`, konteks dari Search
+        Engine disertakan dan sumbernya dikembalikan di `search_sources`. Kegagalan pencarian tidak menggagalkan
+        request. Hasil tidak otomatis disimpan.
       produces:
       - application/json
       responses:
@@ -386,11 +381,7 @@ paths:
           schema:
             $ref: '#/definitions/FailResponse'
         '500':
-          description: Kesalahan server
-          schema:
-            $ref: '#/definitions/ErrorResponse'
-        '502':
-          description: Layanan AI tidak tersedia / gagal
+          description: OpenAI tidak tersedia / gagal, atau kesalahan server
           schema:
             $ref: '#/definitions/ErrorResponse'
       parameters:
@@ -425,6 +416,10 @@ paths:
           description: Token tidak ada, tidak valid, atau kedaluwarsa
           schema:
             $ref: '#/definitions/FailResponse'
+        '403':
+          description: Artikel milik pengguna lain
+          schema:
+            $ref: '#/definitions/FailResponse'
         '404':
           description: Artikel tidak ditemukan
           schema:
@@ -445,8 +440,8 @@ paths:
       tags:
       - Penulis
       summary: Perbarui artikel
-      description: Memperbarui title, category, excerpt, content, cover_image_path (dan opsional is_published). Slug dibuat
-        ulang bila judul berubah.
+      description: Memperbarui title, category, excerpt, content, cover_image_path (dan opsional is_published).
+        Slug dibuat ulang bila judul berubah.
       produces:
       - application/json
       responses:
@@ -460,6 +455,10 @@ paths:
             $ref: '#/definitions/FailResponse'
         '401':
           description: Token tidak ada, tidak valid, atau kedaluwarsa
+          schema:
+            $ref: '#/definitions/FailResponse'
+        '403':
+          description: Artikel milik pengguna lain
           schema:
             $ref: '#/definitions/FailResponse'
         '404':
@@ -506,6 +505,10 @@ paths:
           description: Token tidak ada, tidak valid, atau kedaluwarsa
           schema:
             $ref: '#/definitions/FailResponse'
+        '403':
+          description: Artikel milik pengguna lain
+          schema:
+            $ref: '#/definitions/FailResponse'
         '404':
           description: Artikel tidak ditemukan
           schema:
@@ -543,6 +546,10 @@ paths:
           description: Token tidak ada, tidak valid, atau kedaluwarsa
           schema:
             $ref: '#/definitions/FailResponse'
+        '403':
+          description: Artikel milik pengguna lain
+          schema:
+            $ref: '#/definitions/FailResponse'
         '404':
           description: Artikel tidak ditemukan
           schema:
@@ -564,7 +571,7 @@ paths:
       tags:
       - Admin
       summary: Direktori pengguna
-      description: Seluruh pengguna beserta total_posts dan total_published. Hanya admin.
+      description: Seluruh pengguna beserta total_articles dan total_published. Hanya admin.
       produces:
       - application/json
       responses:
@@ -636,10 +643,6 @@ paths:
             $ref: '#/definitions/FailResponse'
         '403':
           description: Bukan admin
-          schema:
-            $ref: '#/definitions/FailResponse'
-        '404':
-          description: Pengguna tidak ditemukan
           schema:
             $ref: '#/definitions/FailResponse'
         '500':
@@ -835,7 +838,7 @@ definitions:
   Stats:
     type: object
     properties:
-      total:
+      total_articles:
         type: integer
         description: Total artikel
         example: 5
@@ -868,7 +871,7 @@ definitions:
       role:
         type: string
         example: member
-      total_posts:
+      total_articles:
         type: integer
         example: 4
       total_published:
@@ -892,11 +895,18 @@ definitions:
         type: string
         description: Minimal 6 karakter (maks 72 byte)
         example: rahasia123
+      role:
+        type: string
+        description: 'Opsional: ''admin'' atau ''member''; selain itu dipaksa ''member'''
+        enum:
+        - admin
+        - member
+        example: member
     required:
     - username
     - email
     - password
-    description: Role selalu 'member'; field role pada payload diabaikan.
+    description: Field role opsional; hanya 'admin' atau 'member' yang diterima.
   LoginRequest:
     type: object
     properties:
@@ -913,9 +923,6 @@ definitions:
   UpdateProfileRequest:
     type: object
     properties:
-      username:
-        type: string
-        example: budi
       email:
         type: string
         example: budi@contoh.id
@@ -924,8 +931,8 @@ definitions:
         description: Opsional; kosongkan bila tidak diganti
         example: ''
     required:
-    - username
     - email
+    description: Hanya email dan password yang dapat diubah; username tidak berubah.
   AIGenerateRequest:
     type: object
     properties:
@@ -1110,3 +1117,92 @@ definitions:
         example: Draf artikel berhasil dibuat
       data:
         $ref: '#/definitions/AIGenerateData'
+  PublicPost:
+    type: object
+    properties:
+      id:
+        type: integer
+        example: 12
+      title:
+        type: string
+        example: Mengenal Clean Architecture pada Aplikasi Go
+      slug:
+        type: string
+        description: Slug unik; tabrakan diberi sufiks -2, -3, dst.
+        example: mengenal-clean-architecture-pada-aplikasi-go
+      category:
+        type: string
+        example: Teknologi
+        enum:
+        - Teknologi
+        - Pendidikan
+        - Gaya Hidup
+        - Bisnis
+        - Opini
+        - Umum
+      excerpt:
+        type: string
+        example: Memisahkan handler, service, dan repository.
+      content:
+        type: string
+        description: Isi artikel dalam Markdown
+        example: '# Judul
+
+
+          Isi artikel...'
+      cover_image_path:
+        type: string
+        description: URL/teks lokasi gambar sampul (tidak ada endpoint upload)
+        example: https://contoh.id/cover.jpg
+      is_published:
+        type: boolean
+        example: true
+      published_at:
+        type: string
+        description: null bila draf
+        example: '2026-11-19T08:00:00Z'
+        format: date-time
+      reading_time:
+        type: integer
+        description: Estimasi menit baca = ceil(jumlah kata / 200), minimal 1
+        example: 3
+      created_at:
+        type: string
+        example: '2026-11-19T08:00:00Z'
+        format: date-time
+      updated_at:
+        type: string
+        example: '2026-11-19T08:00:00Z'
+        format: date-time
+      author_name:
+        type: string
+        description: Nama penulis
+        example: member
+  PublicPostEnvelope:
+    type: object
+    properties:
+      status:
+        type: string
+        example: success
+        enum:
+        - success
+      message:
+        type: string
+        example: Artikel berhasil diambil
+      data:
+        $ref: '#/definitions/PublicPost'
+  PublicPostListEnvelope:
+    type: object
+    properties:
+      status:
+        type: string
+        example: success
+        enum:
+        - success
+      message:
+        type: string
+        example: Artikel berhasil diambil
+      data:
+        type: array
+        items:
+          $ref: '#/definitions/PublicPost'

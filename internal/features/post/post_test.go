@@ -161,17 +161,21 @@ func TestCreateSlugAndFields(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestOwnershipReturnsNotFound(t *testing.T) {
+func TestOwnershipReturnsForbidden(t *testing.T) {
 	e := newEnv(t)
 	p := e.create(t, e.alice.ID, "Milik Alice", "x", false)
 
 	_, err := e.svc.Get(e.bob.ID, p.ID)
-	assert.ErrorIs(t, err, ErrPostNotFound)
+	assert.ErrorIs(t, err, ErrForbidden)
 	_, err = e.svc.Update(e.bob.ID, p.ID, PostRequest{Title: "Curian", Content: "x"})
-	assert.ErrorIs(t, err, ErrPostNotFound)
+	assert.ErrorIs(t, err, ErrForbidden)
 	_, err = e.svc.TogglePublish(e.bob.ID, p.ID)
+	assert.ErrorIs(t, err, ErrForbidden)
+	assert.ErrorIs(t, e.svc.Delete(e.bob.ID, p.ID), ErrForbidden)
+
+	// ID yang tidak ada tetap 404, bukan 403.
+	_, err = e.svc.Get(e.bob.ID, 9999)
 	assert.ErrorIs(t, err, ErrPostNotFound)
-	assert.ErrorIs(t, e.svc.Delete(e.bob.ID, p.ID), ErrPostNotFound)
 
 	got, err := e.svc.Get(e.alice.ID, p.ID)
 	require.NoError(t, err)
@@ -377,8 +381,29 @@ func TestAdminViews(t *testing.T) {
 	empty, err := e.svc.AdminUserPosts(e.admin.ID)
 	require.NoError(t, err)
 	assert.Empty(t, empty)
-	_, err = e.svc.AdminUserPosts(4242)
-	assert.ErrorIs(t, err, ErrUserNotFound)
+	ghost, err := e.svc.AdminUserPosts(4242)
+	require.NoError(t, err)
+	assert.NotNil(t, ghost)
+	assert.Empty(t, ghost, "pengguna yang tidak ada menghasilkan daftar kosong")
+}
+
+func TestToPublicResponse(t *testing.T) {
+	now := time.Now()
+	withAuthor := ToPublicResponse(PostResponse{
+		ID: 7, UserID: 3, Title: "J", Slug: "j", Content: "isi", ReadingTime: 1, IsPublished: true,
+		PublishedAt: &now, Author: &AuthorResponse{ID: 3, Username: "alice"},
+	})
+	assert.Equal(t, "alice", withAuthor.AuthorName)
+	assert.EqualValues(t, 7, withAuthor.ID)
+	raw, err := json.Marshal(withAuthor)
+	require.NoError(t, err)
+	assert.NotContains(t, string(raw), "user_id")
+	assert.Contains(t, string(raw), `"author_name":"alice"`)
+
+	noAuthor := ToPublicResponse(PostResponse{ID: 8, Title: "T"})
+	assert.Equal(t, "", noAuthor.AuthorName)
+	assert.Empty(t, toPublicResponses(nil))
+	assert.NotNil(t, toPublicResponses(nil))
 }
 
 func TestCascadeDeleteUserRemovesPosts(t *testing.T) {
@@ -560,7 +585,6 @@ func TestServiceRepositoryFailures(t *testing.T) {
 		"ListUsers:admin":         func(s Service) error { _, err := s.AdminUsers(); return err },
 		"CountsPerUser:admin":     func(s Service) error { _, err := s.AdminUsers(); return err },
 		"ListAll:admin":           func(s Service) error { _, err := s.AdminPosts(); return err },
-		"FindUser:adminposts":     func(s Service) error { _, err := s.AdminUserPosts(e.alice.ID); return err },
 		"ListByUser:adminposts":   func(s Service) error { _, err := s.AdminUserPosts(e.alice.ID); return err },
 	}
 	for name, run := range checks {
@@ -638,7 +662,8 @@ func TestHandlerHappyPaths(t *testing.T) {
 
 	code, res = send(r, "GET", "/public/posts/artikel-satu", nil)
 	assert.Equal(t, 200, code)
-	assert.Contains(t, string(res.Data), `"author":{"id":`)
+	assert.Contains(t, string(res.Data), `"author_name":"alice"`)
+	assert.NotContains(t, string(res.Data), "user_id")
 	code, _ = send(r, "GET", "/public/posts/tidak-ada", nil)
 	assert.Equal(t, 404, code)
 
@@ -647,7 +672,7 @@ func TestHandlerHappyPaths(t *testing.T) {
 	assert.Equal(t, 200, code)
 	code, res = send(r, "GET", "/posts/stats", nil)
 	assert.Equal(t, 200, code)
-	assert.JSONEq(t, `{"total":1,"total_terbit":1,"total_draf":0,"total_selesai":1,"belum_selesai":0}`, string(res.Data))
+	assert.JSONEq(t, `{"total_articles":1,"total_terbit":1,"total_draf":0,"total_selesai":1,"belum_selesai":0}`, string(res.Data))
 	code, _ = send(r, "GET", path, nil)
 	assert.Equal(t, 200, code)
 	code, res = send(r, "PUT", path, gin.H{"title": "Judul Baru", "content": "isi"})
@@ -675,15 +700,15 @@ func TestHandlerAdminEndpoints(t *testing.T) {
 
 	code, res := send(r, "GET", "/admin/users", nil)
 	assert.Equal(t, 200, code)
-	assert.Contains(t, string(res.Data), `"total_posts":1`)
+	assert.Contains(t, string(res.Data), `"total_articles":1`)
 	assert.Contains(t, string(res.Data), `"total_published":1`)
 	code, _ = send(r, "GET", "/admin/posts", nil)
 	assert.Equal(t, 200, code)
 	code, _ = send(r, "GET", fmt.Sprintf("/admin/users/%d/posts", e.alice.ID), nil)
 	assert.Equal(t, 200, code)
 	code, res = send(r, "GET", "/admin/users/4242/posts", nil)
-	assert.Equal(t, 404, code)
-	assert.Equal(t, "Pengguna tidak ditemukan", res.Message)
+	assert.Equal(t, 200, code)
+	assert.JSONEq(t, `[]`, string(res.Data))
 	code, _ = send(r, "GET", "/admin/users/abc/posts", nil)
 	assert.Equal(t, 400, code)
 }
@@ -721,6 +746,20 @@ func TestHandlerClientErrors(t *testing.T) {
 	assert.Equal(t, 404, code)
 }
 
+func TestHandlerForbiddenForOtherUsersPost(t *testing.T) {
+	e := newEnv(t)
+	p := e.create(t, e.alice.ID, "Milik Alice", "x", false)
+	r := engine(e.svc, e.bob.ID)
+	path := fmt.Sprintf("/posts/%d", p.ID)
+	for _, tc := range []struct{ method, path string }{
+		{"GET", path}, {"PUT", path}, {"PATCH", path + "/toggle-publish"}, {"DELETE", path},
+	} {
+		code, res := send(r, tc.method, tc.path, gin.H{"title": "Curian", "content": "x"})
+		assert.Equal(t, http.StatusForbidden, code, tc.method)
+		assert.Equal(t, "fail", res.Status, tc.method)
+	}
+}
+
 func TestHandlerServerErrors(t *testing.T) {
 	e := newEnv(t)
 	p := e.create(t, e.alice.ID, "Ada", "x", true)
@@ -737,7 +776,7 @@ func TestHandlerServerErrors(t *testing.T) {
 		{"DELETE", "/posts/" + id, "FindByIDAndUser"},
 		{"GET", "/admin/users", "ListUsers"},
 		{"GET", "/admin/posts", "ListAll"},
-		{"GET", "/admin/users/1/posts", "FindUser"},
+		{"GET", "/admin/users/1/posts", "ListByUser"},
 	}
 	for _, tc := range cases {
 		r := engine(e.failing(tc.fail), e.alice.ID)
@@ -746,4 +785,10 @@ func TestHandlerServerErrors(t *testing.T) {
 		assert.Equal(t, "error", res.Status, tc.path)
 		assert.Equal(t, "Terjadi kesalahan pada server", res.Message, tc.path)
 	}
+}
+func TestRepositoryFindUser(t *testing.T) {
+    e := newEnv(t)
+    u, err := e.repo.FindUser(e.alice.ID)
+    require.NoError(t, err)
+    assert.Equal(t, "alice", u.Username)
 }

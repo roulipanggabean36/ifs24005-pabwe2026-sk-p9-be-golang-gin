@@ -25,7 +25,7 @@ func handleError(c *gin.Context, err error) {
 	case errors.As(err, &validation):
 		response.Fail(c, http.StatusBadRequest, validation.Message)
 	case errors.As(err, &conflict):
-		response.Fail(c, http.StatusConflict, conflict.Message)
+		response.Fail(c, http.StatusBadRequest, conflict.Message)
 	case errors.As(err, &invalid):
 		response.Fail(c, http.StatusUnauthorized, invalid.Error())
 	case errors.Is(err, ErrUserNotFound):
@@ -36,19 +36,19 @@ func handleError(c *gin.Context, err error) {
 	}
 }
 
-// Register godoc: POST /api/auth/register
+// Register godoc: POST /api/auth/register. Mengembalikan token JWT beserta profil pengguna.
 func (h *Handler) Register(c *gin.Context) {
 	var req RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, http.StatusBadRequest, "Format permintaan tidak valid")
 		return
 	}
-	user, err := h.svc.Register(req)
+	res, err := h.svc.Register(req)
 	if err != nil {
 		handleError(c, err)
 		return
 	}
-	response.Success(c, http.StatusCreated, "Registrasi berhasil", user)
+	response.Success(c, http.StatusCreated, "Registrasi berhasil", res)
 }
 
 // Login godoc: POST /api/auth/login

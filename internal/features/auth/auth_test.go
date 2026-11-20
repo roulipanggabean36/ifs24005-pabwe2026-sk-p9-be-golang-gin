@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -39,9 +40,9 @@ func newSvc(t *testing.T) (Service, Repository, *gorm.DB) {
 }
 
 func mustRegister(t *testing.T, svc Service, username, email, password string) *UserResponse {
-	u, err := svc.Register(RegisterRequest{Username: username, Email: email, Password: password})
+	res, err := svc.Register(RegisterRequest{Username: username, Email: email, Password: password})
 	require.NoError(t, err)
-	return u
+	return &res.User
 }
 
 // flakyRepo membungkus Repository nyata dan gagal pada method tertentu.
@@ -145,8 +146,10 @@ func TestRepository(t *testing.T) {
 
 func TestRegister(t *testing.T) {
 	svc, _, db := newSvc(t)
-	u, err := svc.Register(RegisterRequest{Username: "  Siti  ", Email: " Siti@Contoh.ID ", Password: "rahasia1"})
+	res, err := svc.Register(RegisterRequest{Username: "  Siti  ", Email: " Siti@Contoh.ID ", Password: "rahasia1"})
 	require.NoError(t, err)
+	u := res.User
+	assert.Equal(t, 3, len(strings.Split(res.Token, ".")), "register mengembalikan token JWT")
 	assert.Equal(t, "Siti", u.Username)
 	assert.Equal(t, "siti@contoh.id", u.Email)
 	assert.Equal(t, "member", u.Role)
@@ -157,6 +160,25 @@ func TestRegister(t *testing.T) {
 	assert.NoError(t, bcrypt.CompareHashAndPassword([]byte(stored.Password), []byte("rahasia1")))
 }
 
+func TestRegisterRole(t *testing.T) {
+	svc, _, _ := newSvc(t)
+	cases := []struct{ in, want string }{
+		{"admin", "admin"}, {" ADMIN ", "admin"}, {"member", "member"}, {"superuser", "member"}, {"", "member"},
+	}
+	for i, tc := range cases {
+		res, err := svc.Register(RegisterRequest{
+			Username: fmt.Sprintf("user%d", i), Email: fmt.Sprintf("user%d@x.id", i), Password: "123456", Role: tc.in,
+		})
+		require.NoError(t, err)
+		assert.Equal(t, tc.want, res.User.Role, "role=%q", tc.in)
+
+		claims := &middleware.Claims{}
+		_, err = jwt.ParseWithClaims(res.Token, claims, func(*jwt.Token) (any, error) { return []byte(testSecret), nil })
+		require.NoError(t, err)
+		assert.Equal(t, tc.want, claims.Role)
+	}
+}
+
 func TestRegisterValidation(t *testing.T) {
 	svc, _, _ := newSvc(t)
 	long := strings.Repeat("a", 251) + "@x.id"
@@ -165,15 +187,15 @@ func TestRegisterValidation(t *testing.T) {
 		req  RegisterRequest
 		msg  string
 	}{
-		{"username kosong", RegisterRequest{"", "a@b.id", "123456"}, "Username wajib diisi"},
-		{"username pendek", RegisterRequest{"ab", "a@b.id", "123456"}, "Username harus 3-50 karakter"},
-		{"username panjang", RegisterRequest{strings.Repeat("a", 51), "a@b.id", "123456"}, "Username harus 3-50 karakter"},
-		{"username simbol", RegisterRequest{"bud i", "a@b.id", "123456"}, "Username hanya boleh berisi huruf, angka, titik, garis bawah, dan strip"},
-		{"email kosong", RegisterRequest{"budi", "  ", "123456"}, "Email wajib diisi"},
-		{"email salah", RegisterRequest{"budi", "bukan-email", "123456"}, "Format email tidak valid"},
-		{"email panjang", RegisterRequest{"budi", long, "123456"}, "Format email tidak valid"},
-		{"password pendek", RegisterRequest{"budi", "a@b.id", "12345"}, "Password minimal 6 karakter"},
-		{"password terlalu panjang", RegisterRequest{"budi", "a@b.id", strings.Repeat("x", 73)}, "Password maksimal 72 byte"},
+		{"username kosong", RegisterRequest{Username: "", Email: "a@b.id", Password: "123456"}, "Username wajib diisi"},
+		{"username pendek", RegisterRequest{Username: "ab", Email: "a@b.id", Password: "123456"}, "Username harus 3-50 karakter"},
+		{"username panjang", RegisterRequest{Username: strings.Repeat("a", 51), Email: "a@b.id", Password: "123456"}, "Username harus 3-50 karakter"},
+		{"username simbol", RegisterRequest{Username: "bud i", Email: "a@b.id", Password: "123456"}, "Username hanya boleh berisi huruf, angka, titik, garis bawah, dan strip"},
+		{"email kosong", RegisterRequest{Username: "budi", Email: "  ", Password: "123456"}, "Email wajib diisi"},
+		{"email salah", RegisterRequest{Username: "budi", Email: "bukan-email", Password: "123456"}, "Format email tidak valid"},
+		{"email panjang", RegisterRequest{Username: "budi", Email: long, Password: "123456"}, "Format email tidak valid"},
+		{"password pendek", RegisterRequest{Username: "budi", Email: "a@b.id", Password: "12345"}, "Password minimal 6 karakter"},
+		{"password terlalu panjang", RegisterRequest{Username: "budi", Email: "a@b.id", Password: strings.Repeat("x", 73)}, "Password maksimal 72 byte"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -273,32 +295,38 @@ func TestUpdateProfile(t *testing.T) {
 	u := mustRegister(t, svc, "budi", "budi@x.id", "123456")
 	mustRegister(t, svc, "siti", "siti@x.id", "123456")
 
-	// Tanpa mengganti password; username/email milik sendiri tidak dianggap bentrok.
-	got, err := svc.UpdateProfile(u.ID, UpdateProfileRequest{Username: "budi", Email: "baru@x.id"})
+	// Hanya email; email milik sendiri tidak dianggap bentrok, username tidak berubah.
+	got, err := svc.UpdateProfile(u.ID, UpdateProfileRequest{Email: " Baru@X.id "})
+	require.NoError(t, err)
+	assert.Equal(t, "baru@x.id", got.Email)
+	assert.Equal(t, "budi", got.Username)
+	got, err = svc.UpdateProfile(u.ID, UpdateProfileRequest{Email: "baru@x.id"})
 	require.NoError(t, err)
 	assert.Equal(t, "baru@x.id", got.Email)
 
 	// Mengganti password.
-	_, err = svc.UpdateProfile(u.ID, UpdateProfileRequest{Username: "budi2", Email: "baru@x.id", Password: "passwordbaru"})
+	_, err = svc.UpdateProfile(u.ID, UpdateProfileRequest{Email: "baru@x.id", Password: "passwordbaru"})
 	require.NoError(t, err)
 	var stored database.User
 	require.NoError(t, db.First(&stored, u.ID).Error)
-	assert.Equal(t, "budi2", stored.Username)
+	assert.Equal(t, "budi", stored.Username)
 	assert.NoError(t, bcrypt.CompareHashAndPassword([]byte(stored.Password), []byte("passwordbaru")))
 
 	var ve *ValidationError
 	var ce *ConflictError
-	_, err = svc.UpdateProfile(u.ID, UpdateProfileRequest{Username: "", Email: "a@b.id"})
+	_, err = svc.UpdateProfile(u.ID, UpdateProfileRequest{Email: ""})
 	require.ErrorAs(t, err, &ve)
-	_, err = svc.UpdateProfile(u.ID, UpdateProfileRequest{Username: "budi2", Email: "baru@x.id", Password: "123"})
+	_, err = svc.UpdateProfile(u.ID, UpdateProfileRequest{Email: "bukan-email"})
 	require.ErrorAs(t, err, &ve)
-	_, err = svc.UpdateProfile(u.ID, UpdateProfileRequest{Username: "siti", Email: "baru@x.id"})
+	_, err = svc.UpdateProfile(u.ID, UpdateProfileRequest{Email: "baru@x.id", Password: "123"})
+	require.ErrorAs(t, err, &ve)
+	_, err = svc.UpdateProfile(u.ID, UpdateProfileRequest{Email: "siti@x.id"})
 	require.ErrorAs(t, err, &ce)
-	_, err = svc.UpdateProfile(999, UpdateProfileRequest{Username: "x1x", Email: "a@b.id"})
+	_, err = svc.UpdateProfile(999, UpdateProfileRequest{Email: "a@b.id"})
 	assert.ErrorIs(t, err, ErrUserNotFound)
 
-	req := UpdateProfileRequest{Username: "budi3", Email: "b3@x.id", Password: "passwordbaru"}
-	for _, f := range []string{"FindByID", "ExistsByUsername", "Update"} {
+	req := UpdateProfileRequest{Email: "b3@x.id", Password: "passwordbaru"}
+	for _, f := range []string{"FindByID", "ExistsByEmail", "Update"} {
 		base, repo, _ := newSvc(t)
 		owner := mustRegister(t, base, "pemilik", "pemilik@x.id", "123456")
 		failing := NewService(&flakyRepo{Repository: repo, failOn: map[string]bool{f: true}}, testSecret)
@@ -355,11 +383,17 @@ func TestHandlerFlow(t *testing.T) {
 	code, body := call(r, "POST", "/register", "", gin.H{"username": "budi", "email": "budi@x.id", "password": "123456", "role": "admin"})
 	assert.Equal(t, 201, code)
 	data := body["data"].(map[string]any)
-	assert.Equal(t, "member", data["role"], "role dari payload harus diabaikan")
-	assert.NotContains(t, data, "password")
+	assert.NotEmpty(t, data["token"], "register mengembalikan token")
+	user := data["user"].(map[string]any)
+	assert.Equal(t, "admin", user["role"], "role admin diterima")
+	assert.NotContains(t, user, "password")
+
+	code, body = call(r, "POST", "/register", "", gin.H{"username": "ucok", "email": "ucok@x.id", "password": "123456", "role": "superuser"})
+	assert.Equal(t, 201, code)
+	assert.Equal(t, "member", body["data"].(map[string]any)["user"].(map[string]any)["role"], "role tak dikenal menjadi member")
 
 	code, body = call(r, "POST", "/register", "", gin.H{"username": "budi", "email": "lain@x.id", "password": "123456"})
-	assert.Equal(t, 409, code)
+	assert.Equal(t, 400, code)
 	assert.Equal(t, "fail", body["status"])
 	code, _ = call(r, "POST", "/register", "", "{bukan json")
 	assert.Equal(t, 400, code)
@@ -386,15 +420,17 @@ func TestHandlerFlow(t *testing.T) {
 	assert.Equal(t, 200, code)
 	assert.Equal(t, "budi", body["data"].(map[string]any)["username"])
 
-	code, body = call(r, "PUT", "/profile", token, gin.H{"username": "budi", "email": "ganti@x.id"})
+	code, body = call(r, "PUT", "/profile", token, gin.H{"email": "ganti@x.id", "password": "passwordbaru"})
 	assert.Equal(t, 200, code)
 	assert.Equal(t, "ganti@x.id", body["data"].(map[string]any)["email"])
+	code, _ = call(r, "PUT", "/profile", token, gin.H{"email": "bukan-email"})
+	assert.Equal(t, 400, code)
 	code, _ = call(r, "PUT", "/profile", token, "{rusak")
 	assert.Equal(t, 400, code)
 
 	_, _ = call(r, "POST", "/register", "", gin.H{"username": "siti", "email": "siti@x.id", "password": "123456"})
-	code, _ = call(r, "PUT", "/profile", token, gin.H{"username": "siti", "email": "ganti@x.id"})
-	assert.Equal(t, 409, code)
+	code, _ = call(r, "PUT", "/profile", token, gin.H{"email": "siti@x.id"})
+	assert.Equal(t, 400, code)
 }
 
 func TestHandlerSessionAndServerErrors(t *testing.T) {

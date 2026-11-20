@@ -25,8 +25,8 @@ func handleError(c *gin.Context, err error) {
 		response.Fail(c, http.StatusBadRequest, validation.Message)
 	case errors.Is(err, ErrPostNotFound):
 		response.Fail(c, http.StatusNotFound, "Artikel tidak ditemukan")
-	case errors.Is(err, ErrUserNotFound):
-		response.Fail(c, http.StatusNotFound, "Pengguna tidak ditemukan")
+	case errors.Is(err, ErrForbidden):
+		response.Fail(c, http.StatusForbidden, "Dilarang: artikel ini milik pengguna lain")
 	default:
 		log.Printf("post: kesalahan internal: %v", err)
 		response.Error(c, http.StatusInternalServerError, "Terjadi kesalahan pada server")
@@ -56,7 +56,7 @@ func (h *Handler) PublicList(c *gin.Context) {
 		handleError(c, err)
 		return
 	}
-	response.Success(c, http.StatusOK, "Artikel berhasil diambil", posts)
+	response.Success(c, http.StatusOK, "Artikel berhasil diambil", toPublicResponses(posts))
 }
 
 // PublicDetail: GET /api/public/posts/:slug
@@ -66,7 +66,7 @@ func (h *Handler) PublicDetail(c *gin.Context) {
 		handleError(c, err)
 		return
 	}
-	response.Success(c, http.StatusOK, "Artikel berhasil diambil", p)
+	response.Success(c, http.StatusOK, "Artikel berhasil diambil", ToPublicResponse(*p))
 }
 
 // List: GET /api/posts

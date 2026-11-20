@@ -14,6 +14,7 @@ import (
 var (
 	ErrPostNotFound = errors.New("artikel tidak ditemukan")
 	ErrUserNotFound = errors.New("pengguna tidak ditemukan")
+	ErrForbidden    = errors.New("artikel milik pengguna lain")
 )
 
 // UserCount adalah agregat jumlah artikel per pengguna.
@@ -68,8 +69,17 @@ func (r *repository) findOne(query string, args ...any) (*database.Post, error) 
 	return &p, nil
 }
 
+// FindByIDAndUser mengambil artikel berdasarkan ID. ErrPostNotFound bila tidak ada,
+// ErrForbidden bila artikel ada tetapi dimiliki pengguna lain.
 func (r *repository) FindByIDAndUser(id, userID uint) (*database.Post, error) {
-	return r.findOne("id = ? AND user_id = ?", id, userID)
+	p, err := r.findOne("id = ?", id)
+	if err != nil {
+		return nil, err
+	}
+	if p.UserID != userID {
+		return nil, ErrForbidden
+	}
+	return p, nil
 }
 
 func (r *repository) FindPublishedBySlug(slug string) (*database.Post, error) {

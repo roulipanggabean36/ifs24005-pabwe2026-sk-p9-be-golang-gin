@@ -214,16 +214,17 @@ func TestPublicEndpoints(t *testing.T) {
 		Category    string `json:"category"`
 		IsPublished bool   `json:"is_published"`
 		ReadingTime int    `json:"reading_time"`
-		Author      struct{ Username string }
+		AuthorName  string `json:"author_name"`
 	}
 	list := f.do("GET", "/api/public/posts", "", nil)
 	require.Equal(t, 200, list.Code)
 	require.NoError(t, json.Unmarshal(list.Data, &posts))
 	assert.Len(t, posts, 7, "hanya artikel terbit dari seeder")
+	assert.NotContains(t, string(list.Data), "user_id", "respons publik tanpa user_id")
 	for _, p := range posts {
 		assert.True(t, p.IsPublished)
 		assert.GreaterOrEqual(t, p.ReadingTime, 1)
-		assert.NotEmpty(t, p.Author.Username)
+		assert.NotEmpty(t, p.AuthorName)
 	}
 
 	_ = json.Unmarshal(f.do("GET", "/api/public/posts?q=CLEAN+architecture", "", nil).Data, &posts)
@@ -242,12 +243,13 @@ func TestAuthFlow(t *testing.T) {
 	reg := f.do("POST", "/api/auth/register", "", gin.H{"username": "budi", "email": "budi@contoh.id", "password": "rahasia1", "role": "admin"})
 	require.Equal(t, 201, reg.Code)
 	assert.NotContains(t, string(reg.Data), "password")
-	assert.Contains(t, string(reg.Data), `"role":"member"`)
-	assert.Equal(t, 409, f.do("POST", "/api/auth/register", "", gin.H{"username": "budi", "email": "lain@contoh.id", "password": "rahasia1"}).Code)
+	assert.Contains(t, string(reg.Data), `"role":"admin"`)
+	assert.Contains(t, string(reg.Data), `"token":"`)
+	assert.Equal(t, 400, f.do("POST", "/api/auth/register", "", gin.H{"username": "budi", "email": "lain@contoh.id", "password": "rahasia1"}).Code)
 
 	token := f.login(t, "budi@contoh.id", "rahasia1")
 	assert.Equal(t, 200, f.do("GET", "/api/auth/profile", token, nil).Code)
-	assert.Equal(t, 200, f.do("PUT", "/api/auth/profile", token, gin.H{"username": "budi", "email": "baru@contoh.id"}).Code)
+	assert.Equal(t, 200, f.do("PUT", "/api/auth/profile", token, gin.H{"email": "baru@contoh.id"}).Code)
 	assert.Equal(t, 200, f.do("POST", "/api/auth/logout", token, nil).Code)
 
 	assert.Equal(t, 401, f.do("GET", "/api/auth/profile", "", nil).Code)
@@ -266,7 +268,7 @@ func TestAuthorWorkflowAndOwnership(t *testing.T) {
 	assert.Equal(t, 401, f.do("GET", "/api/posts", "", nil).Code)
 
 	var before struct {
-		Total       int `json:"total"`
+		Total       int `json:"total_articles"`
 		TotalTerbit int `json:"total_terbit"`
 	}
 	require.NoError(t, json.Unmarshal(f.do("GET", "/api/posts/stats", member, nil).Data, &before))
@@ -286,17 +288,18 @@ func TestAuthorWorkflowAndOwnership(t *testing.T) {
 	assert.False(t, p.IsPublished)
 
 	path := fmt.Sprintf("/api/posts/%d", p.ID)
-	assert.Equal(t, 404, f.do("GET", path, admin, nil).Code, "milik orang lain → 404")
-	assert.Equal(t, 404, f.do("PUT", path, admin, gin.H{"title": "x", "content": "x"}).Code)
-	assert.Equal(t, 404, f.do("PATCH", path+"/toggle-publish", admin, nil).Code)
-	assert.Equal(t, 404, f.do("DELETE", path, admin, nil).Code)
+	assert.Equal(t, 403, f.do("GET", path, admin, nil).Code, "milik orang lain → 403")
+	assert.Equal(t, 403, f.do("PUT", path, admin, gin.H{"title": "x", "content": "x"}).Code)
+	assert.Equal(t, 403, f.do("PATCH", path+"/toggle-publish", admin, nil).Code)
+	assert.Equal(t, 403, f.do("DELETE", path, admin, nil).Code)
+	assert.Equal(t, 404, f.do("GET", "/api/posts/99999999", admin, nil).Code, "ID tidak ada → 404")
 
 	assert.Equal(t, 404, f.do("GET", "/api/public/posts/catatan-baru", "", nil).Code)
 	assert.Equal(t, 200, f.do("PATCH", path+"/toggle-publish", member, nil).Code)
 	assert.Equal(t, 200, f.do("GET", "/api/public/posts/catatan-baru", "", nil).Code)
 
 	var after struct {
-		Total        int `json:"total"`
+		Total        int `json:"total_articles"`
 		TotalTerbit  int `json:"total_terbit"`
 		TotalDraf    int `json:"total_draf"`
 		TotalSelesai int `json:"total_selesai"`
@@ -325,11 +328,11 @@ func TestAdminRBAC(t *testing.T) {
 		assert.Equal(t, 403, f.do("GET", p, member, nil).Code, p)
 		assert.Equal(t, 200, f.do("GET", p, admin, nil).Code, p)
 	}
-	assert.Equal(t, 404, f.do("GET", "/api/admin/users/9999/posts", admin, nil).Code)
+	assert.Equal(t, 200, f.do("GET", "/api/admin/users/9999/posts", admin, nil).Code, "pengguna tidak ada → daftar kosong")
 
 	var users []struct {
 		Username       string
-		TotalPosts     int `json:"total_posts"`
+		TotalPosts     int `json:"total_articles"`
 		TotalPublished int `json:"total_published"`
 	}
 	require.NoError(t, json.Unmarshal(f.do("GET", "/api/admin/users", admin, nil).Data, &users))
@@ -350,7 +353,9 @@ func TestAIGenerateThroughRouter(t *testing.T) {
 	token := f.login(t, "member", "member")
 
 	assert.Equal(t, 401, f.do("POST", "/api/posts/ai-generate", "", gin.H{"topic": "x"}).Code)
-	assert.Equal(t, 400, f.do("POST", "/api/posts/ai-generate", token, gin.H{"topic": " "}).Code)
+	blank := f.do("POST", "/api/posts/ai-generate", token, gin.H{"topic": " "})
+	assert.Equal(t, 400, blank.Code)
+	assert.Contains(t, strings.ToLower(blank.Message), "topic")
 
 	res := f.do("POST", "/api/posts/ai-generate", token, gin.H{"topic": "Danau Toba", "category": "Umum", "include_web_search": true})
 	require.Equal(t, 200, res.Code, res.Message)
@@ -366,7 +371,7 @@ func TestAIGenerateThroughRouter(t *testing.T) {
 
 	// Hasil AI tidak otomatis tersimpan.
 	var stats struct {
-		Total int `json:"total"`
+		Total int `json:"total_articles"`
 	}
 	require.NoError(t, json.Unmarshal(f.do("GET", "/api/posts/stats", token, nil).Data, &stats))
 	assert.Equal(t, 5, stats.Total)
@@ -376,11 +381,12 @@ func TestAIGenerateThroughRouter(t *testing.T) {
 	require.Equal(t, 200, res.Code)
 	assert.Contains(t, string(res.Data), `"search_sources":[]`)
 
-	// OpenAI mati → 502 status error.
+	// OpenAI mati → 500 status error dengan pesan yang menyebut OpenAI.
 	f.openai.Close()
 	down := f.do("POST", "/api/posts/ai-generate", token, gin.H{"topic": "Danau Toba"})
-	assert.Equal(t, 502, down.Code)
+	assert.Equal(t, 500, down.Code)
 	assert.Equal(t, "error", down.Status)
+	assert.Contains(t, strings.ToLower(down.Message), "openai")
 }
 
 func TestStaticRoutesDoNotClashWithID(t *testing.T) {
